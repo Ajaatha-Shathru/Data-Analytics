@@ -1,0 +1,5 @@
+This Quarto project analyzes youth education completion rates globally by merging UNICEF education data with World Bank development indicators.
+Through a series of visualizations including world maps, scatter plots, bubble charts, and box plots, the report explores indirect relationships between education, economic prosperity, and life expectancy.
+The analysis highlights persistent global disparities, emphasizing the need for targeted investments in education infrastructure and social policies.
+Python (pandas, plotly, plotnine) and Quarto were used to build an interactive, code-transparent HTML report.
+The final project supports the broader understanding of education’s role as both a driver and outcome of sustainable development progress.
