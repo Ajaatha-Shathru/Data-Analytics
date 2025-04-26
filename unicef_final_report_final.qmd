@@ -1,0 +1,308 @@
+
+---
+title: "Global Analysis: Youth Education Completion and Economic Indicators"
+format:
+  html:
+    embed-resources: true
+    code-fold: true
+---
+
+<div style="text-align: center; margin-top: 100px; margin-bottom: 100px;">
+  <h1><b>Global Progress in Youth Education and Economic Development</b></h1>
+  <h3>Analyzing UNICEF and World Bank Data (2024)</h3>
+  <p><i>Prepared by Ajaatha Shathru Ilangovan</i></p>
+</div>
+
+---
+
+# Youth Education and Development: A Global Story
+
+## 1. Introduction
+
+Understanding the well-being of young populations requires examining **both education and economic progress**. In this report, we merge UNICEF's education completion data with World Bank development indicators to tell a broader story:
+
+- How does economic strength influence education?
+- Where are the major gaps?
+- Are health outcomes associated with educational achievement?
+- How does global education inequality manifest across income groups?
+
+*By connecting education to economic and health conditions, we reveal patterns critical for sustainable global development.*
+
+---
+
+## 2. Data Preparation
+
+```{python}
+import pandas as pd
+import plotly.express as px
+from plotnine import *
+import pycountry
+from statsmodels.nonparametric.smoothers_lowess import lowess
+
+# Load the merged data
+df = pd.read_csv("UNICEF-Merged Data.csv")
+
+# Clean the data
+data = df.dropna(subset=['obs_value'])
+
+# Create ISO Alpha-3 codes for countries
+def get_alpha_3(country_name):
+    try:
+        return pycountry.countries.lookup(country_name).alpha_3
+    except LookupError:
+        return None
+
+data['iso_alpha3'] = data['country'].apply(get_alpha_3)
+data = data.dropna(subset=['iso_alpha3'])
+
+# GDP Group categorization
+def gdp_group(gdp):
+    if pd.isna(gdp):
+        return 'Unknown'
+    elif gdp > 12000:
+        return 'High Income'
+    elif gdp > 4000:
+        return 'Upper-Middle Income'
+    elif gdp > 1000:
+        return 'Lower-Middle Income'
+    else:
+        return 'Low Income'
+
+data['GDP_Group'] = data['GDP per capita (constant 2015 US$)'].apply(gdp_group)
+```
+
+---
+
+## 3. Visual Insights
+
+### 3.1 World Map: Global Education Completion Rates
+
+```{python}
+fig = px.choropleth(
+    data,
+    locations="iso_alpha3",
+    color="obs_value",
+    hover_name="country",
+    color_continuous_scale=px.colors.sequential.Blues,
+    title='Global Upper Secondary Education Completion Rates'
+)
+
+fig.update_layout(geo=dict(showframe=False, showcoastlines=False))
+fig.show()
+```
+
+*Observation:* The world map highlights significant disparities between countries. Wealthier regions show higher completion rates while many lower-income regions lag behind.
+
+---
+
+### 3.2 Top 10 Countries by Education Completion
+
+```{python}
+top10_sorted = data.sort_values('obs_value', ascending=False).head(10)
+
+(
+    ggplot(top10_sorted, aes(x='reorder(country, obs_value)', y='obs_value', fill='obs_value')) +
+    geom_col() +
+    scale_fill_gradient(low='lightgreen', high='darkgreen') +
+    coord_flip() +
+    theme_minimal() +
+    labs(
+        title='Top 10 Countries by Education Completion',
+        x='Country',
+        y='Completion Rate (%)'
+    ) +
+    theme(legend_position='none')
+)
+```
+
+*Insight:* Countries with the highest completion rates tend to be high-income, politically stable nations.
+
+---
+
+### 3.3 Bottom 10 Countries by Education Completion
+
+```{python}
+bottom10_sorted = data.sort_values('obs_value', ascending=True).head(10)
+
+(
+    ggplot(bottom10_sorted, aes(x='reorder(country, obs_value)', y='obs_value', fill='obs_value')) +
+    geom_col() +
+    scale_fill_gradient(low='mistyrose', high='darkred') +
+    coord_flip() +
+    theme_minimal() +
+    labs(
+        title='Bottom 10 Countries by Education Completion',
+        x='Country',
+        y='Completion Rate (%)'
+    ) +
+    theme(legend_position='none')
+)
+```
+
+*Observation:* The red bars represent the most vulnerable nations, often impacted by conflict or extreme poverty.
+
+---
+
+### 3.4 Scatter Plot: Education Completion vs GDP per Capita
+
+```{python}
+scatter_data = data.dropna(subset=['GDP per capita (constant 2015 US$)'])
+
+(
+    ggplot(scatter_data, aes(x='GDP per capita (constant 2015 US$)', y='obs_value')) +
+    geom_point(color='darkblue') +
+    geom_smooth(method='lm', color='black') +
+    theme_minimal() +
+    labs(
+        title='GDP per Capita vs Education Completion Rate',
+        x='GDP per Capita (constant 2015 US$)',
+        y='Completion Rate (%)'
+    )
+)
+```
+
+*Insight:* A positive trend exists. Wealthier nations generally have higher education completion.
+
+---
+
+### 3.5 Time Series: Global Trend of Education Completion Over Time
+
+```{python}
+global_trend = data.groupby('year')['obs_value'].mean().reset_index()
+
+(
+    ggplot(global_trend, aes(x='year', y='obs_value')) +
+    geom_line(color='green') +
+    geom_point() +
+    scale_x_continuous(breaks=range(int(global_trend['year'].min()), int(global_trend['year'].max()) + 1, 1)) +
+    theme_minimal() +
+    labs(
+        title='Global Trend of Education Completion Over Time',
+        x='Year',
+        y='Global Average Completion Rate (%)'
+    )
+)
+```
+
+*Observation:* Despite fluctuations, the overall global education completion trend shows consistent improvement.
+
+---
+
+### 3.6 Bubble Chart: Education Completion vs Life Expectancy
+
+```{python}
+bubble_data = data.dropna(subset=['Life expectancy at birth, total (years)', 'Population, total']).copy()
+
+def assign_region(country):
+    if country in ['United States', 'Canada', 'Mexico', 'Brazil', 'Argentina', 'Chile']:
+        return 'Americas'
+    elif country in ['Germany', 'France', 'United Kingdom', 'Italy', 'Spain']:
+        return 'Europe'
+    elif country in ['China', 'India', 'Japan', 'Indonesia', 'Vietnam']:
+        return 'Asia'
+    elif country in ['South Africa', 'Nigeria', 'Egypt', 'Kenya']:
+        return 'Africa'
+    else:
+        return 'Other'
+
+bubble_data['region'] = bubble_data['country'].apply(assign_region)
+
+fig = px.scatter(
+    bubble_data,
+    x="obs_value",
+    y="Life expectancy at birth, total (years)",
+    size="Population, total",
+    color="region",
+    hover_name="country",
+    size_max=60,
+    title="Education Completion vs Life Expectancy (Bubble Size = Population, Colored by Region)"
+)
+
+lowess_smoothed = lowess(bubble_data['Life expectancy at birth, total (years)'], bubble_data['obs_value'], frac=0.4)
+
+fig.add_scatter(
+    x=lowess_smoothed[:, 0],
+    y=lowess_smoothed[:, 1],
+    mode='lines',
+    line=dict(color='black', dash='dash'),
+    name='Reference Trend Line'
+)
+
+fig.update_layout(
+    xaxis_title="Education Completion Rate (%)",
+    yaxis_title="Life Expectancy (Years)",
+    legend_title="Region",
+    template="plotly_white"
+)
+
+fig.show()
+```
+
+*Observation:* Higher education completion rates are associated with longer life expectancy, likely due to indirect factors such as improved economic conditions, better healthcare access, increased health awareness, and enhanced social support systems.
+
+---
+
+### 3.7 Box Plot: Education Completion by GDP Group
+
+```{python}
+def gdp_group(gdp):
+    if pd.isna(gdp):
+        return 'Unknown'
+    elif gdp > 12000:
+        return 'High Income'
+    elif gdp > 4000:
+        return 'Upper-Middle Income'
+    elif gdp > 1000:
+        return 'Lower-Middle Income'
+    else:
+        return 'Low Income'
+
+data['GDP_Group'] = data['GDP per capita (constant 2015 US$)'].apply(gdp_group)
+
+# Step 2: Clean data and reorder GDP_Group
+box_data = data[data['GDP_Group'] != 'Unknown'].copy()
+
+box_data['GDP_Group'] = pd.Categorical(
+    box_data['GDP_Group'],
+    categories=['Low Income', 'Lower-Middle Income', 'Upper-Middle Income', 'High Income'],
+    ordered=True
+)
+
+# Step 3: Create box plot
+(
+    ggplot(box_data, aes(x='GDP_Group', y='obs_value', fill='GDP_Group')) +
+    geom_boxplot() +
+    theme_minimal() +
+    labs(
+        title='Distribution of Education Completion by Economic Group',
+        x='GDP Income Group',
+        y='Education Completion Rate (%)'
+    ) +
+    theme(legend_position='none')
+)
+
+```
+
+
+*Insight:* Higher income groups exhibit higher median education completion rates with lower spread compared to lower-income groups.
+
+---
+
+## 4. Conclusion
+
+> **Key Takeaways:**
+>
+> - Higher education completion rates are often associated with improved economic prosperity and longer life expectancy, reflecting deeper societal advancements such as healthcare access, workforce development, and informed civic participation.
+> - Significant regional and economic disparities persist, with low- and middle-income countries facing structural barriers to achieving similar education outcomes.
+> - Continuous investment in education infrastructure, inclusive policies, and social development initiatives remains critical to bridging these gaps and driving progress towards the Sustainable Development Goals (SDGs).
+
+*Education is both a cause and a result of development. It fuels economic growth, health improvements, and social mobility, while advancements in a nation's economy, healthcare, and governance systems create more equitable access to education, reinforcing a continuous cycle of progress.*
+
+---
+
+# References
+- UNICEF Indicator Database (2024)
+- World Bank World Development Indicators (2024)
+
+---
+
